@@ -1,0 +1,16 @@
+# Replace each handle with the GitHub username of that member.
+# The last matching pattern wins, so more specific paths are listed after broader ones.
+# See docs/TEAM-AREAS.md.
+
+*                               @campusstay-member-1
+
+/frontend/                      @campusstay-member-3
+/backend/                       @campusstay-member-4
+/backend/src/models/            @campusstay-member-2
+/backend/scripts/               @campusstay-member-2
+/backend/tests/                 @campusstay-member-5
+/docs/05-TEST-PLAN.md           @campusstay-member-5
+/docs/03-DATABASE-DESIGN.md     @campusstay-member-2
+/docs/04-API-SPECIFICATION.md   @campusstay-member-4
+/docs/06-SECURITY.md            @campusstay-member-4
+/docs/08-USER-MANUAL.md         @campusstay-member-1
