@@ -5,7 +5,7 @@
 
 CampusStay is a hostel booking and management system for a university. Students search for a room, reserve it, and pay the booking fee with M-Pesa. Hostel admins approve bookings and keep the room list current. A super admin also manages staff accounts. Reports cover bookings, payments, and occupancy.
 
-This repository is the shared skeleton for a five-person group project. Authentication, room search, security controls, and the project documentation are in place. Booking, M-Pesa, admin actions, and reports are routed and validated, and each unfinished area is marked with a `TODO(member-N)` comment.
+
 
 Replace `YOUR_ORG` in the CI badge after the team creates the GitHub repository.
 
