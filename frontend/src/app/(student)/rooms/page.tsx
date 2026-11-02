@@ -1,11 +1,10 @@
-import { PlaceholderPage } from '@/components/layout/PlaceholderPage';
+import { Suspense } from 'react';
+import { RoomBrowser } from '@/components/campus/room-browser';
 
-// TODO(member-3): replace this placeholder with hostel and room search using the useRooms hook.
 export default function RoomsPage() {
   return (
-    <PlaceholderPage
-      title="Rooms"
-      summary="Students will search hostels and compare room type, price, and availability here."
-    />
+    <Suspense fallback={<p className="text-sm text-[#7c8882]">Loading rooms…</p>}>
+      <RoomBrowser />
+    </Suspense>
   );
 }
