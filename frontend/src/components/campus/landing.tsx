@@ -6,10 +6,10 @@ import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { ArrowRight, BedDouble, Check, Menu, Search, ShieldCheck, X } from 'lucide-react';
 import { CampusButton } from '@/components/campus/campus-button';
-import { formatKes, labelRoomType } from '@/components/campus/format';
+import { RoomCard } from '@/components/campus/room-card';
 import { useAuth } from '@/hooks/useAuth';
 import { useRooms } from '@/hooks/useRooms';
-import type { RoomSummary, RoomType } from '@/types';
+import type { RoomType } from '@/types';
 
 const roomTypes: Array<{ value: '' | RoomType; label: string }> = [
   { value: '', label: 'Any room type' },
@@ -256,8 +256,8 @@ export function Landing() {
           <p className="text-sm text-[#7c8882]">Loading rooms…</p>
         ) : visibleRooms.length > 0 ? (
           <div className="grid gap-5 md:grid-cols-3">
-            {visibleRooms.map((room) => (
-              <LiveRoomCard key={room.id} room={room} />
+            {visibleRooms.map((room, index) => (
+              <RoomCard key={room.id} room={room} index={index} />
             ))}
           </div>
         ) : error ? (
@@ -362,56 +362,6 @@ export function Landing() {
       </footer>
     </main>
   );
-}
-
-function LiveRoomCard({ room }: { room: RoomSummary }) {
-  return (
-    <article className="group overflow-hidden rounded-2xl border border-[#dedbd4] bg-[#fbfaf7] transition duration-300 hover:-translate-y-1 hover:border-[#b8c9bc] hover:shadow-[0_18px_45px_rgba(32,55,48,0.1)]">
-      <div className="relative h-48 overflow-hidden bg-[#e9f1e6]">
-        <Image
-          src="/images/campusstay-hero.png"
-          alt=""
-          fill
-          className="object-cover opacity-70 mix-blend-multiply transition duration-500 group-hover:scale-105"
-          sizes="400px"
-        />
-        <span className="absolute left-4 top-4 rounded-full bg-[#fbfaf7]/90 px-3 py-1 text-[10px] font-bold uppercase tracking-[0.14em] text-[#54716a]">
-          {room.availabilityStatus === 'available' ? 'Available now' : labelAvailabilitySafe(room)}
-        </span>
-      </div>
-      <div className="p-5">
-        <div className="flex items-start justify-between gap-3">
-          <div>
-            <h3 className="text-lg font-semibold tracking-[-0.03em] text-[#173d39]">
-              {room.hostel.name} {room.roomNumber}
-            </h3>
-            <p className="mt-1 text-xs text-[#7f8b84]">
-              {room.hostel.location} · {labelRoomType(room.roomType)} · sleeps {room.capacity}
-            </p>
-          </div>
-          <ArrowRight className="size-4 text-[#84938b] transition-transform group-hover:translate-x-1" />
-        </div>
-        <div className="mt-5 flex items-center justify-between border-t border-[#ece9e2] pt-4">
-          <p className="text-sm font-semibold text-[#40645d]">
-            {formatKes(room.price)}
-            <span className="font-normal text-[#99a29d]"> / month</span>
-          </p>
-          <Link
-            href="/rooms"
-            className="text-[10px] font-semibold uppercase tracking-[0.12em] text-[#96a19b]"
-          >
-            View rooms
-          </Link>
-        </div>
-      </div>
-    </article>
-  );
-}
-
-function labelAvailabilitySafe(room: RoomSummary): string {
-  if (room.availabilityStatus === 'booked') return 'Booked';
-  if (room.availabilityStatus === 'maintenance') return 'Maintenance';
-  return 'Available now';
 }
 
 function Step({ number, title, text }: { number: string; title: string; text: string }) {
