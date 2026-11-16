@@ -17,10 +17,10 @@ export default defineConfig({
       MONGODB_URI: 'mongodb://127.0.0.1:27017/campusstay-test-placeholder',
       JWT_SECRET: 'test-jwt-secret-must-be-at-least-32-characters',
       JWT_EXPIRES_IN: '15m',
-      CLIENT_URL: 'http://localhost:3000',
+      CLIENT_URL: 'http://localhost:3001',
       MPESA_ENV: 'sandbox',
       ORG_NAME: 'CampusStay',
-      ORG_LOGO_URL: 'http://localhost:3000/logo.svg',
+      ORG_LOGO_URL: 'http://localhost:3001/logo.svg',
     },
   },
   resolve: {

@@ -5,8 +5,6 @@
 
 CampusStay is a hostel booking and management system for a university. Students search for a room, reserve it, and pay the booking fee with M-Pesa. Hostel admins approve bookings and keep the room list current. A super admin also manages staff accounts. Reports cover bookings, payments, and occupancy.
 
-
-
 Replace `YOUR_ORG` in the CI badge after the team creates the GitHub repository.
 
 ## Features
@@ -97,7 +95,7 @@ npm run seed
 npm run dev
 ```
 
-- Website: http://localhost:3000
+- Website: http://localhost:3001
 - API health check: http://localhost:4000/api/v1/health
 
 `npm run dev` starts both apps. Stop it with Ctrl+C.

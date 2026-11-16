@@ -65,7 +65,7 @@ const envSchema = z.object({
   SMTP_PASSWORD: z.string().default(''),
   EMAIL_FROM: z.string().default('CampusStay <no-reply@campusstay.test>'),
   ORG_NAME: z.string().min(1).default('CampusStay'),
-  ORG_LOGO_URL: z.string().default('http://localhost:3000/logo.svg'),
+  ORG_LOGO_URL: z.string().default('http://localhost:3001/logo.svg'),
 });
 
 const parsed = envSchema.safeParse(process.env);

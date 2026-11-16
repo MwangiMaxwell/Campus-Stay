@@ -14,7 +14,7 @@ Safaricom Daraja is an external system. The API will call it for an STK push, an
 flowchart LR
   student[Student browser]
   staff[Staff browser]
-  web[Next.js on port 3000]
+  web[Next.js on port 3001]
   api[Express on port 4000]
   db[(MongoDB Atlas)]
   mpesa[Safaricom Daraja]

@@ -36,13 +36,13 @@ Leave `NEXT_PUBLIC_API_URL` empty. Set `API_PROXY_TARGET` to the API origin, def
 npm run dev -w frontend
 ```
 
-The site uses port 3000. The API CORS origin expects that port.
+The site uses port 3001. The API CORS origin expects that port.
 
 ## Scripts
 
 | Script                          | Purpose                                  |
 | ------------------------------- | ---------------------------------------- |
-| `npm run dev -w frontend`       | Next.js dev server on port 3000          |
+| `npm run dev -w frontend`       | Next.js dev server on port 3001          |
 | `npm run build -w frontend`     | Production build                         |
 | `npm run start -w frontend`     | Serve the production build               |
 | `npm run lint -w frontend`      | ESLint                                   |
