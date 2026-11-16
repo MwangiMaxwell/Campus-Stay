@@ -1,9 +1,20 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, beforeEach, vi } from 'vitest';
 import request from 'supertest';
-import { AuditLog, User } from '@/models';
+import { AuditLog, User, PasswordResetToken } from '@/models';
 import { agent, app, createAccount, studentPayload } from './helpers';
+import { createHash } from 'node:crypto';
 
+import { sendPasswordResetEmail } from '@/services/email.service';
+
+vi.mock('@/services/email.service', () => ({
+  sendPasswordResetEmail: vi.fn().mockResolvedValue(undefined),
+}));
+
+const mockedSendEmail = vi.mocked(sendPasswordResetEmail);
 describe('auth', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
   it('registers a student, sets an httpOnly cookie, and hides the password hash', async () => {
     const response = await request(app)
       .post('/api/v1/auth/register')
@@ -96,5 +107,90 @@ describe('auth', () => {
         password: 'Student#2026',
       });
     expect(response.status).toBe(400);
+  });
+
+  it('requests a password reset without revealing whether an account exists', async () => {
+    await createAccount('student', 'reset@campusstay.test');
+
+    const existing = await request(app)
+      .post('/api/v1/auth/forgot-password')
+      .send({ email: 'reset@campusstay.test' });
+
+    const unknown = await request(app)
+      .post('/api/v1/auth/forgot-password')
+      .send({ email: 'unknown@campusstay.test' });
+
+    expect(existing.status).toBe(200);
+    expect(unknown.status).toBe(200);
+    expect(existing.body.data.message).toBe(unknown.body.data.message);
+    expect(mockedSendEmail).toHaveBeenCalledTimes(1);
+
+    const tokens = await PasswordResetToken.find({
+      user: (await User.findOne({ email: 'reset@campusstay.test' }))!._id,
+    });
+
+    expect(tokens).toHaveLength(1);
+    expect(tokens[0].tokenHash).not.toBe(mockedSendEmail.mock.calls[0][1]);
+  });
+
+  it('resets a password using a valid token and records an audit log', async () => {
+    await createAccount('student', 'reset-success@campusstay.test');
+
+    await request(app)
+      .post('/api/v1/auth/forgot-password')
+      .send({ email: 'reset-success@campusstay.test' });
+
+    const resetUrl = mockedSendEmail.mock.calls[0][1];
+    const token = new URL(resetUrl).searchParams.get('token');
+
+    expect(token).toBeTruthy();
+
+    const response = await request(app).post('/api/v1/auth/reset-password').send({
+      token,
+      password: 'NewPassword#2026',
+    });
+
+    expect(response.status).toBe(200);
+    expect(response.body.data.message).toBe('Password reset successfully');
+
+    const login = await request(app).post('/api/v1/auth/login').send({
+      email: 'reset-success@campusstay.test',
+      password: 'NewPassword#2026',
+    });
+
+    expect(login.status).toBe(200);
+    expect(await PasswordResetToken.countDocuments()).toBe(0);
+
+    const logs = await AuditLog.find({ action: 'auth.password_reset' });
+    expect(logs).toHaveLength(1);
+  });
+
+  it('rejects an invalid password reset token', async () => {
+    const response = await request(app).post('/api/v1/auth/reset-password').send({
+      token: 'this-is-an-invalid-reset-token',
+      password: 'NewPassword#2026',
+    });
+
+    expect(response.status).toBe(400);
+  });
+
+  it('rejects an expired password reset token', async () => {
+    const user = await createAccount('student', 'expired@campusstay.test');
+    const token = 'expired-reset-token-123456789';
+    const tokenHash = createHash('sha256').update(token).digest('hex');
+
+    await PasswordResetToken.create({
+      user: user._id,
+      tokenHash,
+      expiresAt: new Date(Date.now() - 60_000),
+    });
+
+    const response = await request(app).post('/api/v1/auth/reset-password').send({
+      token,
+      password: 'NewPassword#2026',
+    });
+
+    expect(response.status).toBe(400);
+    expect(await PasswordResetToken.countDocuments()).toBe(0);
   });
 });

@@ -8,7 +8,7 @@ export default defineConfig({
     globalSetup: './tests/globalSetup.ts',
     fileParallelism: false,
     maxWorkers: 1,
-    isolate: false,
+    isolate: true,
     testTimeout: 30000,
     hookTimeout: 180000,
     env: {

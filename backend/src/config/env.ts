@@ -55,6 +55,15 @@ const envSchema = z.object({
   MPESA_SHORTCODE: z.string().default(''),
   MPESA_PASSKEY: z.string().default(''),
   MPESA_CALLBACK_URL: z.string().default(''),
+  SMTP_HOST: z.string().default(''),
+  SMTP_PORT: z.string().regex(/^\d+$/).default('587').transform(Number),
+  SMTP_SECURE: z
+    .enum(['true', 'false'])
+    .default('false')
+    .transform((value) => value === 'true'),
+  SMTP_USER: z.string().default(''),
+  SMTP_PASSWORD: z.string().default(''),
+  EMAIL_FROM: z.string().default('CampusStay <no-reply@campusstay.test>'),
   ORG_NAME: z.string().min(1).default('CampusStay'),
   ORG_LOGO_URL: z.string().default('http://localhost:3001/logo.svg'),
 });

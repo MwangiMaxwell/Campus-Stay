@@ -35,6 +35,7 @@ export const errorHandler: ErrorRequestHandler = (err, _req, res, _next) => {
   if (typeof err === 'object' && err !== null && 'name' in err) {
     const name = (err as { name?: string }).name;
     if (name === 'ValidationError' || name === 'CastError') {
+      console.error('MONGOOSE DATA ERROR:', err);
       sendError(res, 400, 'Invalid data');
       return;
     }

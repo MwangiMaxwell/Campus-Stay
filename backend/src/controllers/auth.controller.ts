@@ -1,4 +1,11 @@
-import { getCurrentUser, login, logout, registerStudent } from '@/services/auth.service';
+import {
+  getCurrentUser,
+  login,
+  logout,
+  registerStudent,
+  forgotPassword as requestPasswordReset,
+  resetPassword as completePasswordReset,
+} from '@/services/auth.service';
 import type { PublicUser } from '@/types';
 import { AppError } from '@/utils/AppError';
 import { sendSuccess } from '@/utils/apiResponse';
@@ -44,16 +51,16 @@ export const me = asyncHandler(async (req, res) => {
   sendSuccess(res, { user });
 });
 
-// TODO(member-4): create a password reset token and send the reset instructions.
-export const forgotPassword = asyncHandler(async (req) => {
-  const _body = req.validated?.body as ForgotPasswordInput;
-  void _body;
-  throw new AppError(501, 'Not implemented');
+export const forgotPassword = asyncHandler(async (req, res) => {
+  const body = req.validated?.body as ForgotPasswordInput;
+  await requestPasswordReset(body);
+  sendSuccess(res, {
+    message: 'If an account exists with that email, password reset instructions will be sent.',
+  });
 });
 
-// TODO(member-4): verify the reset token, replace the password hash, and write an auth.password_reset audit entry.
-export const resetPassword = asyncHandler(async (req) => {
-  const _body = req.validated?.body as ResetPasswordInput;
-  void _body;
-  throw new AppError(501, 'Not implemented');
+export const resetPassword = asyncHandler(async (req, res) => {
+  const body = req.validated?.body as ResetPasswordInput;
+  await completePasswordReset(body, clientIp(req));
+  sendSuccess(res, { message: 'Password reset successfully' });
 });

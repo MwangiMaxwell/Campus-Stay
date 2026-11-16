@@ -25,6 +25,7 @@ import { validate } from '@/middleware/validate';
 import {
   adminCreateUserSchema,
   adminListQuerySchema,
+  adminRoomListQuerySchema,
   adminRoomSchema,
   adminUpdateRoomSchema,
   adminUpdateUserSchema,
@@ -33,6 +34,7 @@ import {
   paymentsReportQuerySchema,
 } from '@/validators/admin.validator';
 import { idParamsSchema } from '@/validators/common';
+import { adminBookingListQuerySchema } from '@/validators/admin.validator';
 
 export const adminRouter = Router();
 
@@ -59,7 +61,7 @@ adminRouter.delete(
   deleteUser,
 );
 
-adminRouter.get('/rooms', validate({ query: adminListQuerySchema }), listAdminRooms);
+adminRouter.get('/rooms', validate({ query: adminRoomListQuerySchema }), listAdminRooms);
 adminRouter.post('/rooms', validate({ body: adminRoomSchema }), createRoom);
 adminRouter.get('/rooms/:id', validate({ params: idParamsSchema }), getAdminRoom);
 adminRouter.patch(
@@ -69,7 +71,7 @@ adminRouter.patch(
 );
 adminRouter.delete('/rooms/:id', validate({ params: idParamsSchema }), deleteRoom);
 
-adminRouter.get('/bookings', listAdminBookings);
+adminRouter.get('/bookings', validate({ query: adminBookingListQuerySchema }), listAdminBookings);
 adminRouter.patch('/bookings/:id/approve', validate({ params: idParamsSchema }), approveBooking);
 adminRouter.patch('/bookings/:id/cancel', validate({ params: idParamsSchema }), cancelAdminBooking);
 
