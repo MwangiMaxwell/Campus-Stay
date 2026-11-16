@@ -23,9 +23,12 @@ function rejectAuditMutation(): never {
 auditLogSchema.pre('updateOne', rejectAuditMutation);
 auditLogSchema.pre('updateMany', rejectAuditMutation);
 auditLogSchema.pre('findOneAndUpdate', rejectAuditMutation);
+auditLogSchema.pre('replaceOne', rejectAuditMutation);
+auditLogSchema.pre('findOneAndReplace', rejectAuditMutation);
 auditLogSchema.pre('deleteOne', rejectAuditMutation);
 auditLogSchema.pre('deleteMany', rejectAuditMutation);
 auditLogSchema.pre('findOneAndDelete', rejectAuditMutation);
+
 auditLogSchema.pre('save', function rejectExisting() {
   if (!this.isNew) {
     throw new Error('Audit logs are append-only');

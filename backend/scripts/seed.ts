@@ -1,9 +1,8 @@
-// TODO(member-2): extend this seed when new demo records are required.
 import 'dotenv/config';
 import bcrypt from 'bcryptjs';
-import { connectDb, disconnectDb } from '@/config/db';
-import { Hostel, Room, User } from '@/models';
-import type { AvailabilityStatus, RoomType, UserRole, UserStatus } from '@/types';
+import { connectDb, disconnectDb } from '../src/config/db';
+import { Hostel, Room, User } from '../src/models';
+import type { AvailabilityStatus, RoomType, UserRole, UserStatus } from '../src/types';
 
 const BCRYPT_ROUNDS = 12;
 
@@ -148,8 +147,18 @@ async function seed(): Promise<void> {
   await connectDb();
 
   const savedUsers = new Map<string, string>();
+
   for (const person of users) {
-    const passwordHash = await bcrypt.hash(person.password, BCRYPT_ROUNDS);
+    const existing = await User.findOne({ email: person.email }).select('+passwordHash');
+
+    let passwordHash: string;
+
+    if (existing?.passwordHash && (await bcrypt.compare(person.password, existing.passwordHash))) {
+      passwordHash = existing.passwordHash;
+    } else {
+      passwordHash = await bcrypt.hash(person.password, BCRYPT_ROUNDS);
+    }
+
     const saved = await User.findOneAndUpdate(
       { email: person.email },
       {
@@ -162,50 +171,48 @@ async function seed(): Promise<void> {
           studentRegNo: person.studentRegNo,
         },
       },
-      { upsert: true, returnDocument: 'after', setDefaultsOnInsert: true, runValidators: true },
+      {
+        upsert: true,
+        returnDocument: 'after',
+        setDefaultsOnInsert: true,
+        runValidators: true,
+      },
     );
-    if (!saved) {
-      throw new Error(`Could not seed ${person.email}`);
-    }
+
+    if (!saved) throw new Error(`Could not seed ${person.email}`);
     savedUsers.set(person.email, String(saved._id));
   }
 
   const managerId = savedUsers.get('grace.mwangi@campusstay.test');
-  if (!managerId) {
-    throw new Error('Admin user is missing');
-  }
+  if (!managerId) throw new Error('Admin user is missing');
 
   const hostels = [
-    {
-      name: 'Kilimo Hostels',
-      location: 'North Campus',
-      contactPhone: '+254700000001',
-    },
-    {
-      name: 'Lakeside Hall',
-      location: 'South Campus',
-      contactPhone: '+254700000002',
-    },
+    { name: 'Kilimo Hostels', location: 'North Campus', contactPhone: '+254700000001' },
+    { name: 'Lakeside Hall', location: 'South Campus', contactPhone: '+254700000002' },
   ];
 
   const hostelIds = new Map<string, string>();
+
   for (const hostel of hostels) {
     const saved = await Hostel.findOneAndUpdate(
       { name: hostel.name },
       { $set: { ...hostel, manager: managerId } },
-      { upsert: true, returnDocument: 'after', setDefaultsOnInsert: true, runValidators: true },
+      {
+        upsert: true,
+        returnDocument: 'after',
+        setDefaultsOnInsert: true,
+        runValidators: true,
+      },
     );
-    if (!saved) {
-      throw new Error(`Could not seed ${hostel.name}`);
-    }
+
+    if (!saved) throw new Error(`Could not seed ${hostel.name}`);
     hostelIds.set(hostel.name, String(saved._id));
   }
 
   for (const room of rooms) {
     const hostelId = hostelIds.get(room.hostel);
-    if (!hostelId) {
-      throw new Error(`Hostel ${room.hostel} is missing`);
-    }
+    if (!hostelId) throw new Error(`Hostel ${room.hostel} is missing`);
+
     await Room.findOneAndUpdate(
       { hostel: hostelId, roomNumber: room.roomNumber },
       {
@@ -216,7 +223,12 @@ async function seed(): Promise<void> {
           availabilityStatus: room.availabilityStatus,
         },
       },
-      { upsert: true, returnDocument: 'after', setDefaultsOnInsert: true, runValidators: true },
+      {
+        upsert: true,
+        returnDocument: 'after',
+        setDefaultsOnInsert: true,
+        runValidators: true,
+      },
     );
   }
 
@@ -232,7 +244,6 @@ async function seed(): Promise<void> {
 seed()
   .catch((error: unknown) => {
     console.error(error);
-    process.exitCode = 1;
   })
   .finally(async () => {
     await disconnectDb();
