@@ -1,6 +1,4 @@
-import mongoose from 'mongoose';
-import { listRooms } from '@/services/room.service';
-import { AppError } from '@/utils/AppError';
+import { listRooms, getRoomById } from '@/services/room.service';
 import { sendSuccess } from '@/utils/apiResponse';
 import { asyncHandler } from '@/utils/asyncHandler';
 import type { IdParams } from '@/validators/common';
@@ -12,11 +10,9 @@ export const getRooms = asyncHandler(async (req, res) => {
   sendSuccess(res, data);
 });
 
-// TODO(member-4): return one room together with its hostel.
-export const getRoom = asyncHandler(async (req) => {
+// Return one room together with its hostel.
+export const getRoom = asyncHandler(async (req, res) => {
   const params = req.validated?.params as IdParams;
-  if (!mongoose.isValidObjectId(params.id)) {
-    throw new AppError(400, 'Invalid id');
-  }
-  throw new AppError(501, 'Not implemented');
+  const room = await getRoomById(params.id);
+  sendSuccess(res, room);
 });

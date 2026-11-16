@@ -31,7 +31,7 @@ describe('role protection', () => {
     expect(deniedDelete.status).toBe(403);
   });
 
-  it('requires a student session for bookings and validates the body before the stub', async () => {
+  it('requires a student session for bookings and validates the request', async () => {
     const guest = await request(app).get('/api/v1/bookings');
     expect(guest.status).toBe(401);
 
@@ -49,7 +49,8 @@ describe('role protection', () => {
       checkInDate: '2026-11-01',
       checkOutDate: '2026-12-01',
     });
-    expect(valid.status).toBe(501);
+    expect(valid.status).toBe(404);
+    expect(valid.body.error.message).toBe('Room not found');
   });
 
   it('allows a super admin to suspend another user', async () => {
@@ -75,13 +76,7 @@ describe('role protection', () => {
 
     expect(targetUser).toBeDefined();
 
-    console.log('TARGET USER:', targetUser);
-
     const response = await session.delete(`/api/v1/admin/users/${targetUser.id}`);
-
-    console.log('SUSPENSION RESPONSE:', JSON.stringify(response.body, null, 2));
-
-    expect(response.status).toBe(200);
 
     expect(response.status).toBe(200);
     expect(response.body.success).toBe(true);
