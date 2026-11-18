@@ -1,14 +1,27 @@
 import { AppError, isDuplicateKey } from '@/utils/AppError';
 import { asyncHandler } from '@/utils/asyncHandler';
-import { Booking, Hostel, Payment, Room, User, toPublicUser } from '@/models';
+import { AuditLog, Booking, Hostel, Payment, Room, User, toPublicUser } from '@/models';
 import { recordAudit } from '@/services/audit.service';
 import { sendSuccess } from '@/utils/apiResponse';
-import { bookingsReport, occupancyReport, paymentsReport } from '@/services/report.service';
+import {
+  bookingsReport,
+  dashboardSummary,
+  occupancyReport,
+  paymentsReport,
+} from '@/services/report.service';
 import bcrypt from 'bcryptjs';
+import mongoose from 'mongoose';
+import { withId } from '@/utils/withId';
 
 import type {
   AdminBookingListQuery,
   AdminCreateUserInput,
+  AdminHostelInput,
+  AdminUpdateHostelInput,
+  AuditLogListQuery,
+  BookingsReportQuery,
+  OccupancyReportQuery,
+  PaymentsReportQuery,
   AdminListQuery,
   AdminPaymentListQuery,
   AdminRoomInput,
@@ -41,6 +54,19 @@ function requireUser(req: { user?: { id: string } }): string {
   return req.user.id;
 }
 
+function escapeRegex(value: string): string {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
+// Admins manage student accounts. Only a super admin manages staff accounts and roles.
+function assertCanManage(actorRole: string | undefined, targetRole: string | undefined): void {
+  if (actorRole === 'super_admin') return;
+
+  if (targetRole !== undefined && targetRole !== 'student') {
+    throw new AppError(403, 'Only a super admin can manage staff accounts');
+  }
+}
+
 // --------------------------------------------------
 // USER MANAGEMENT
 // --------------------------------------------------
@@ -50,11 +76,16 @@ export const listUsers = asyncHandler(async (req, res) => {
   requireUser(req);
 
   const query = req.validated?.query as AdminListQuery;
-  const { page, limit, role, status } = query;
+  const { page, limit, role, status, q } = query;
+
+  const pattern = q ? mongoose.trusted({ $regex: escapeRegex(q), $options: 'i' }) : undefined;
 
   const filter = {
     ...(role && { role }),
     ...(status && { status }),
+    ...(pattern && {
+      $or: [{ fullName: pattern }, { email: pattern }, { studentRegNo: pattern }],
+    }),
   };
 
   const [users, total] = await Promise.all([
@@ -81,9 +112,7 @@ export const createUser = asyncHandler(async (req, res) => {
   const userId = requireUser(req);
   const body = req.validated?.body as AdminCreateUserInput;
 
-  if (body.role === 'super_admin' && req.user?.role !== 'super_admin') {
-    throw new AppError(403, 'Only a super admin can create another super admin');
-  }
+  assertCanManage(req.user?.role, body.role);
 
   const passwordHash = await bcrypt.hash(body.password, 12);
 
@@ -146,12 +175,15 @@ export const updateUser = asyncHandler(async (req, res) => {
     throw new AppError(404, 'User not found');
   }
 
-  if (existingUser.role === 'super_admin' && req.user?.role !== 'super_admin') {
-    throw new AppError(403, 'Only a super admin can update a super admin');
-  }
+  assertCanManage(req.user?.role, existingUser.role);
+  assertCanManage(req.user?.role, body.role);
 
-  if (body.role === 'super_admin' && req.user?.role !== 'super_admin') {
-    throw new AppError(403, 'Only a super admin can assign the super_admin role');
+  if (
+    userId === id &&
+    ((body.role !== undefined && body.role !== existingUser.role) ||
+      (body.status !== undefined && body.status !== existingUser.status))
+  ) {
+    throw new AppError(409, 'You cannot change your own role or status');
   }
 
   const updates = {
@@ -182,7 +214,7 @@ export const updateUser = asyncHandler(async (req, res) => {
     const user = await User.findByIdAndUpdate(
       id,
       { $set: updates },
-      { new: true, runValidators: true },
+      { returnDocument: 'after', runValidators: true },
     );
 
     if (!user) {
@@ -225,9 +257,7 @@ export const deleteUser = asyncHandler(async (req, res) => {
     throw new AppError(404, 'User not found');
   }
 
-  if (user.role === 'super_admin' && req.user?.role !== 'super_admin') {
-    throw new AppError(403, 'Only a super admin can suspend a super admin');
-  }
+  assertCanManage(req.user?.role, user.role);
 
   user.status = 'suspended';
   await user.save();
@@ -259,17 +289,23 @@ export const listAdminRooms = asyncHandler(async (req, res) => {
   requireUser(req);
 
   const query = req.validated?.query as AdminRoomListQuery;
-  const { page, limit } = query;
+  const { page, limit, hostelId, roomType, availabilityStatus } = query;
+
+  const filter = {
+    ...(hostelId && { hostel: hostelId }),
+    ...(roomType && { roomType }),
+    ...(availabilityStatus && { availabilityStatus }),
+  };
 
   const [rows, total] = await Promise.all([
-    Room.find()
+    Room.find(filter)
       .populate('hostel', 'name location contactPhone')
       .sort({ roomNumber: 1, _id: 1 })
       .skip((page - 1) * limit)
       .limit(limit)
       .lean<AdminRoomRow[]>(),
 
-    Room.countDocuments(),
+    Room.countDocuments(filter),
   ]);
 
   const rooms = rows.map((room) => ({
@@ -408,6 +444,21 @@ export const updateRoom = asyncHandler(async (req, res) => {
     }
   }
 
+  // A room with a live booking has to stay booked until that booking is closed.
+  if (body.availabilityStatus !== undefined && body.availabilityStatus !== 'booked') {
+    const activeBooking = await Booking.exists({
+      room: existingRoom._id,
+      status: mongoose.trusted({ $in: ['pending', 'approved'] }),
+    });
+
+    if (activeBooking) {
+      throw new AppError(
+        409,
+        'This room has an active booking. Cancel or complete the booking before changing its status.',
+      );
+    }
+  }
+
   const updates = {
     ...(body.hostelId !== undefined && {
       hostel: body.hostelId,
@@ -432,7 +483,7 @@ export const updateRoom = asyncHandler(async (req, res) => {
   const room = await Room.findByIdAndUpdate(
     id,
     { $set: updates },
-    { new: true, runValidators: true },
+    { returnDocument: 'after', runValidators: true },
   )
     .populate('hostel', 'name location contactPhone')
     .lean<AdminRoomRow>();
@@ -545,17 +596,17 @@ export const listAdminBookings = asyncHandler(async (req, res) => {
     Booking.countDocuments(filter),
   ]);
 
+  // trusted() keeps the $in operator, which sanitizeFilter would otherwise neutralise.
   const payments = await Payment.find({
-    booking: {
+    booking: mongoose.trusted({
       $in: rows.map((booking) => booking._id),
-    },
+    }),
   })
     .sort({ createdAt: -1 })
     .lean();
 
   const bookings = rows.map((booking) => ({
-    ...booking,
-    id: String(booking._id),
+    ...withId(booking),
     latestPayment:
       payments.find((payment) => String(payment.booking) === String(booking._id)) ?? null,
   }));
@@ -617,7 +668,7 @@ export const approveBooking = asyncHandler(async (req, res) => {
         approvedAt: new Date(),
       },
     },
-    { new: true },
+    { returnDocument: 'after' },
   );
 
   if (!updatedBooking) {
@@ -661,46 +712,38 @@ export const cancelAdminBooking = asyncHandler(async (req, res) => {
     throw new AppError(409, 'This booking cannot be cancelled');
   }
 
+  // trusted() keeps the $in operator, which sanitizeFilter would otherwise neutralise.
   const updatedBooking = await Booking.findOneAndUpdate(
     {
       _id: id,
-      status: {
-        $in: ['pending', 'approved'],
-      },
+      status: mongoose.trusted({ $in: ['pending', 'approved'] }),
     },
     {
       $set: {
         status: 'cancelled',
       },
     },
-    { new: true },
+    { returnDocument: 'after' },
   );
 
   if (!updatedBooking) {
     throw new AppError(409, 'Booking could not be cancelled');
   }
 
-  const otherActiveBooking = await Booking.exists({
-    room: booking.room,
-    _id: { $ne: booking._id },
-    status: {
-      $in: ['pending', 'approved'],
+  // The partial unique index allows one live booking per room, so the room is free again.
+  await Room.findOneAndUpdate(
+    {
+      _id: booking.room,
+      availabilityStatus: 'booked',
     },
-  });
+    {
+      $set: {
+        availabilityStatus: 'available',
+      },
+    },
+  );
 
-  if (!otherActiveBooking) {
-    await Room.findOneAndUpdate(
-      {
-        _id: booking.room,
-        availabilityStatus: 'booked',
-      },
-      {
-        $set: {
-          availabilityStatus: 'available',
-        },
-      },
-    );
-  }
+  const refundDue = Boolean(await Payment.exists({ booking: booking._id, status: 'success' }));
 
   await recordAudit({
     userId,
@@ -710,12 +753,56 @@ export const cancelAdminBooking = asyncHandler(async (req, res) => {
     ip: req.ip,
     meta: {
       roomId: String(booking.room),
+      refundDue,
     },
   });
 
   sendSuccess(res, {
     booking: updatedBooking,
+    refundDue,
   });
+});
+
+// Close an approved booking once the stay is over and free the room.
+export const completeAdminBooking = asyncHandler(async (req, res) => {
+  const userId = requireUser(req);
+  const { id } = req.validated?.params as IdParams;
+
+  const booking = await Booking.findById(id);
+
+  if (!booking) {
+    throw new AppError(404, 'Booking not found');
+  }
+
+  if (booking.status !== 'approved') {
+    throw new AppError(409, 'Only approved bookings can be completed');
+  }
+
+  const updatedBooking = await Booking.findOneAndUpdate(
+    { _id: id, status: 'approved' },
+    { $set: { status: 'completed' } },
+    { returnDocument: 'after' },
+  );
+
+  if (!updatedBooking) {
+    throw new AppError(409, 'Booking could not be completed');
+  }
+
+  await Room.findOneAndUpdate(
+    { _id: booking.room, availabilityStatus: 'booked' },
+    { $set: { availabilityStatus: 'available' } },
+  );
+
+  await recordAudit({
+    userId,
+    action: 'booking.complete',
+    targetType: 'booking',
+    targetId: String(booking._id),
+    ip: req.ip,
+    meta: { roomId: String(booking.room) },
+  });
+
+  sendSuccess(res, { booking: updatedBooking });
 });
 
 // --------------------------------------------------
@@ -759,7 +846,7 @@ export const listAdminPayments = asyncHandler(async (req, res) => {
   ]);
 
   sendSuccess(res, {
-    payments,
+    payments: payments.map(withId),
     pagination: {
       page,
       limit,
@@ -809,7 +896,7 @@ export const getAdminPayment = asyncHandler(async (req, res) => {
 export const getBookingsReport = asyncHandler(async (req, res) => {
   requireUser(req);
 
-  const report = await bookingsReport();
+  const report = await bookingsReport(req.validated?.query as BookingsReportQuery);
 
   sendSuccess(res, { report });
 });
@@ -817,7 +904,7 @@ export const getBookingsReport = asyncHandler(async (req, res) => {
 export const getPaymentsReport = asyncHandler(async (req, res) => {
   requireUser(req);
 
-  const report = await paymentsReport();
+  const report = await paymentsReport(req.validated?.query as PaymentsReportQuery);
 
   sendSuccess(res, { report });
 });
@@ -825,7 +912,115 @@ export const getPaymentsReport = asyncHandler(async (req, res) => {
 export const getOccupancyReport = asyncHandler(async (req, res) => {
   requireUser(req);
 
-  const report = await occupancyReport();
+  const report = await occupancyReport(req.validated?.query as OccupancyReportQuery);
 
   sendSuccess(res, { report });
+});
+
+// --------------------------------------------------
+// DASHBOARD AND AUDIT LOG
+// --------------------------------------------------
+
+export const getDashboard = asyncHandler(async (req, res) => {
+  requireUser(req);
+
+  sendSuccess(res, { dashboard: await dashboardSummary() });
+});
+
+// Read-only view of the append-only audit log (NFR1: who did what, and when).
+export const listAuditLogs = asyncHandler(async (req, res) => {
+  requireUser(req);
+
+  const { page, limit, action } = req.validated?.query as AuditLogListQuery;
+  const filter = action ? { action: mongoose.trusted({ $regex: `^${escapeRegex(action)}` }) } : {};
+
+  const [rows, total] = await Promise.all([
+    AuditLog.find(filter)
+      .populate('user', 'fullName email role')
+      .sort({ createdAt: -1 })
+      .skip((page - 1) * limit)
+      .limit(limit)
+      .lean(),
+    AuditLog.countDocuments(filter),
+  ]);
+
+  sendSuccess(res, {
+    logs: rows.map(withId),
+    pagination: {
+      page,
+      limit,
+      total,
+      totalPages: total === 0 ? 0 : Math.ceil(total / limit),
+    },
+  });
+});
+
+// --------------------------------------------------
+// HOSTELS
+// --------------------------------------------------
+
+export const createHostel = asyncHandler(async (req, res) => {
+  const userId = requireUser(req);
+  const body = req.validated?.body as AdminHostelInput;
+
+  try {
+    const hostel = await Hostel.create({
+      name: body.name,
+      location: body.location,
+      contactPhone: body.contactPhone,
+      manager: userId,
+    });
+
+    await recordAudit({
+      userId,
+      action: 'admin.hostel.create',
+      targetType: 'hostel',
+      targetId: String(hostel._id),
+      ip: req.ip,
+      meta: { name: hostel.name },
+    });
+
+    sendSuccess(res, { hostel: withId(hostel.toObject()) }, 201);
+  } catch (error) {
+    if (isDuplicateKey(error)) {
+      throw new AppError(409, 'A hostel with this name already exists');
+    }
+
+    throw error;
+  }
+});
+
+export const updateHostel = asyncHandler(async (req, res) => {
+  const userId = requireUser(req);
+  const { id } = req.validated?.params as IdParams;
+  const body = req.validated?.body as AdminUpdateHostelInput;
+
+  try {
+    const hostel = await Hostel.findByIdAndUpdate(
+      id,
+      { $set: body },
+      { returnDocument: 'after', runValidators: true },
+    ).lean();
+
+    if (!hostel) {
+      throw new AppError(404, 'Hostel not found');
+    }
+
+    await recordAudit({
+      userId,
+      action: 'admin.hostel.update',
+      targetType: 'hostel',
+      targetId: String(hostel._id),
+      ip: req.ip,
+      meta: { updatedFields: Object.keys(body) },
+    });
+
+    sendSuccess(res, { hostel: withId(hostel) });
+  } catch (error) {
+    if (isDuplicateKey(error)) {
+      throw new AppError(409, 'A hostel with this name already exists');
+    }
+
+    throw error;
+  }
 });

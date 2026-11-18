@@ -1,4 +1,4 @@
-import { AdminBookings } from '@/components/campus/admin-screens';
+import { AdminBookings } from '@/components/campus/admin-bookings';
 
 export default function AdminBookingsPage() {
   return <AdminBookings />;

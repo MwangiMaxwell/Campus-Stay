@@ -55,6 +55,15 @@ const envSchema = z.object({
   MPESA_SHORTCODE: z.string().default(''),
   MPESA_PASSKEY: z.string().default(''),
   MPESA_CALLBACK_URL: z.string().default(''),
+  MPESA_SIMULATE: z
+    .enum(['true', 'false'])
+    .default('false')
+    .transform((value) => value === 'true'),
+  BOOKING_HOLD_HOURS: z
+    .string()
+    .regex(/^[1-9]\d*$/)
+    .default('24')
+    .transform(Number),
   SMTP_HOST: z.string().default(''),
   SMTP_PORT: z.string().regex(/^\d+$/).default('587').transform(Number),
   SMTP_SECURE: z
@@ -81,6 +90,10 @@ if (parsed.data.NODE_ENV === 'production' && parsed.data.JWT_SECRET === EXAMPLE_
   throw new Error(
     'Refusing to start with the example JWT_SECRET. Set a unique secret in production.',
   );
+}
+
+if (parsed.data.NODE_ENV === 'production' && parsed.data.MPESA_SIMULATE) {
+  throw new Error('MPESA_SIMULATE must be false in production. Real payments need Safaricom.');
 }
 
 export const env = parsed.data;

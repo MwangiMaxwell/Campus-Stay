@@ -32,3 +32,30 @@ export async function createAccount(
 export function agent() {
   return request.agent(app);
 }
+
+function isoDay(offsetDays: number): string {
+  const date = new Date();
+  date.setUTCHours(0, 0, 0, 0);
+  date.setUTCDate(date.getUTCDate() + offsetDays);
+  return date.toISOString();
+}
+
+// Stay dates relative to today so tests never go stale.
+export function stayDates(startInDays = 14, lengthInDays = 30) {
+  return {
+    checkInDate: isoDay(startInDays),
+    checkOutDate: isoDay(startInDays + lengthInDays),
+  };
+}
+
+export async function login(email: string) {
+  const session = agent();
+  const response = await session.post('/api/v1/auth/login').send({
+    email,
+    password: 'Student#2026',
+  });
+  if (response.status !== 200) {
+    throw new Error(`Login failed for ${email}: ${response.status}`);
+  }
+  return session;
+}

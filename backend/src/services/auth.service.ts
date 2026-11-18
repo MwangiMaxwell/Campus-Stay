@@ -1,4 +1,4 @@
-import bcrypt from 'bcryptjs';
+﻿import bcrypt from 'bcryptjs';
 import { createHash, randomBytes } from 'node:crypto';
 import { User, PasswordResetToken, toPublicUser } from '@/models';
 import type { PublicUser } from '@/types';
@@ -8,10 +8,12 @@ import { sendPasswordResetEmail } from '@/services/email.service';
 import { env } from '@/config/env';
 import { logger } from '@/utils/logger';
 import type {
+  ChangePasswordInput,
   ForgotPasswordInput,
   LoginInput,
   RegisterInput,
   ResetPasswordInput,
+  UpdateProfileInput,
 } from '@/validators/auth.validator';
 
 const BCRYPT_ROUNDS = 12;
@@ -170,6 +172,66 @@ export async function resetPassword(input: ResetPasswordInput, ip?: string): Pro
     action: 'auth.password_reset',
     targetType: 'user',
     targetId: String(user._id),
+    ip,
+  });
+}
+
+export async function updateProfile(
+  userId: string,
+  input: UpdateProfileInput,
+  ip?: string,
+): Promise<PublicUser> {
+  const user = await User.findById(userId);
+
+  if (!user || user.status !== 'active') {
+    throw new AppError(401, 'Authentication required');
+  }
+
+  if (input.fullName !== undefined) user.fullName = input.fullName;
+  if (input.phone !== undefined) user.phone = input.phone;
+  if (input.studentRegNo !== undefined) {
+    user.studentRegNo = input.studentRegNo === '' ? undefined : input.studentRegNo;
+  }
+
+  await user.save();
+
+  await recordAudit({
+    userId,
+    action: 'auth.profile_update',
+    targetType: 'user',
+    targetId: userId,
+    ip,
+    meta: { updatedFields: Object.keys(input) },
+  });
+
+  return toPublicUser(user);
+}
+
+export async function changePassword(
+  userId: string,
+  input: ChangePasswordInput,
+  ip?: string,
+): Promise<void> {
+  const user = await User.findById(userId).select('+passwordHash');
+
+  if (!user || user.status !== 'active') {
+    throw new AppError(401, 'Authentication required');
+  }
+
+  const matches = await bcrypt.compare(input.currentPassword, user.passwordHash);
+
+  if (!matches) {
+    throw new AppError(400, 'Your current password is incorrect');
+  }
+
+  user.passwordHash = await bcrypt.hash(input.newPassword, BCRYPT_ROUNDS);
+  await user.save();
+
+  await recordAudit({
+    userId,
+    action: 'auth.password_change',
+    targetType: 'user',
+    targetId: userId,
     ip,
   });
 }

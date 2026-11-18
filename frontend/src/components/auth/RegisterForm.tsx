@@ -56,7 +56,8 @@ export function RegisterForm() {
       <p className="mt-2 text-sm text-muted">
         Students can register here. Staff accounts are created by a super admin.
       </p>
-      <form className="mt-6 space-y-4" onSubmit={handleSubmit(onSubmit)} noValidate>
+      {/* method="post" keeps credentials out of the URL if the form submits before hydration. */}
+      <form method="post" className="mt-6 space-y-4" onSubmit={handleSubmit(onSubmit)} noValidate>
         {formError ? <Alert tone="danger">{formError}</Alert> : null}
         <Input
           label="Full name"

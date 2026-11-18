@@ -1,4 +1,4 @@
-import { z } from 'zod';
+﻿import { z } from 'zod';
 
 export const passwordSchema = z
   .string()
@@ -42,6 +42,47 @@ export const forgotPasswordSchema = z.object({
   email: z.string().trim().toLowerCase().pipe(z.email('Enter a valid email address')),
 });
 
+export const resetPasswordSchema = z
+  .object({
+    password: passwordSchema,
+    confirmPassword: z.string(),
+  })
+  .refine((value) => value.password === value.confirmPassword, {
+    message: 'Passwords do not match',
+    path: ['confirmPassword'],
+  });
+
+export const profileSchema = z.object({
+  fullName: z.string().trim().min(2, 'Enter your full name').max(80),
+  phone: z
+    .string()
+    .trim()
+    .regex(
+      /^\+?[0-9]{10,15}$/,
+      'Enter a phone number with 10 to 15 digits. A leading + is optional.',
+    ),
+  studentRegNo: z
+    .string()
+    .trim()
+    .refine((value) => value.length === 0 || (value.length >= 2 && value.length <= 32), {
+      message: 'Use 2 to 32 characters, or leave this blank',
+    }),
+});
+
+export const changePasswordSchema = z
+  .object({
+    currentPassword: z.string().min(1, 'Enter your current password'),
+    newPassword: passwordSchema,
+    confirmPassword: z.string(),
+  })
+  .refine((value) => value.newPassword === value.confirmPassword, {
+    message: 'Passwords do not match',
+    path: ['confirmPassword'],
+  });
+
+export type ProfileValues = z.infer<typeof profileSchema>;
+export type ChangePasswordValues = z.infer<typeof changePasswordSchema>;
 export type LoginValues = z.infer<typeof loginSchema>;
 export type RegisterValues = z.infer<typeof registerSchema>;
 export type ForgotPasswordValues = z.infer<typeof forgotPasswordSchema>;
+export type ResetPasswordValues = z.infer<typeof resetPasswordSchema>;

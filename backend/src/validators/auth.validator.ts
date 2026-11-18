@@ -23,6 +23,25 @@ export const resetPasswordSchema = z.object({
   password: passwordSchema,
 });
 
+export const updateProfileSchema = z
+  .object({
+    fullName: z.string().trim().min(2, 'Enter your full name').max(80),
+    phone: phoneSchema,
+    // An empty string clears the registration number.
+    studentRegNo: z.union([z.string().trim().min(2).max(32), z.literal('')]),
+  })
+  .partial()
+  .refine((value) => Object.keys(value).length > 0, {
+    message: 'Provide at least one field to update',
+  });
+
+export const changePasswordSchema = z.object({
+  currentPassword: z.string().min(1, 'Enter your current password').max(72),
+  newPassword: passwordSchema,
+});
+
+export type UpdateProfileInput = z.infer<typeof updateProfileSchema>;
+export type ChangePasswordInput = z.infer<typeof changePasswordSchema>;
 export type RegisterInput = z.infer<typeof registerSchema>;
 export type LoginInput = z.infer<typeof loginSchema>;
 export type ForgotPasswordInput = z.infer<typeof forgotPasswordSchema>;

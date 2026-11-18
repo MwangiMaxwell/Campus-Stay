@@ -1,11 +1,8 @@
-import { describe, expect, it } from 'vitest';
+﻿import { describe, expect, it } from 'vitest';
 import { AuditLog, Hostel, Room } from '@/models';
-import { agent, createAccount } from './helpers';
+import { agent, createAccount, stayDates } from './helpers';
 
-const dates = {
-  checkInDate: '2026-12-01T00:00:00.000Z',
-  checkOutDate: '2027-01-01T00:00:00.000Z',
-};
+const dates = stayDates();
 
 async function createStudentSession(email: string) {
   await createAccount('student', email);

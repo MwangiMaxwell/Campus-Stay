@@ -20,7 +20,7 @@ const nav = [
   { href: '/admin/rooms', label: 'Rooms', icon: BedDouble },
   { href: '/admin/bookings', label: 'Bookings', icon: ClipboardList },
   { href: '/admin/payments', label: 'Payments', icon: CircleDollarSign },
-  { href: '/admin/users', label: 'Students', icon: Users },
+  { href: '/admin/users', label: 'Users', icon: Users },
   { href: '/admin/reports', label: 'Reports', icon: FileBarChart },
 ];
 

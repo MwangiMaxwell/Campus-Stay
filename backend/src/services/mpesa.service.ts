@@ -1,8 +1,14 @@
+﻿import { randomBytes, randomUUID } from 'node:crypto';
 import { env } from '@/config/env';
 import { Booking, Payment } from '@/models';
 import { recordAudit } from '@/services/audit.service';
+import { sendPaymentConfirmationEmail } from '@/services/email.service';
 import { AppError } from '@/utils/AppError';
+import { logger } from '@/utils/logger';
 import type { MpesaCallbackInput, StkPushInput } from '@/validators/payment.validator';
+
+// How long the simulated phone prompt takes before it "completes".
+export const SIMULATED_PROMPT_DELAY_MS = 4000;
 
 const REQUIRED = [
   'MPESA_CONSUMER_KEY',
@@ -83,7 +89,72 @@ function getMpesaTimestamp(): string {
   return `${values.year}${values.month}${values.day}${values.hour}${values.minute}${values.second}`;
 }
 
+// Local development stand-in for Safaricom. It creates the same pending payment and then
+// delivers a callback through the real handler, so the rest of the flow is exercised as in
+// production. A phone number ending in 0000 simulates a customer who cancels the prompt.
+async function simulateStkPush(userId: string, input: StkPushInput, amount: number) {
+  const phoneNumber = normalizePhoneNumber(input.phoneNumber);
+  const checkoutRequestId = `sim_ws_CO_${randomUUID()}`;
+
+  const payment = await Payment.create({
+    booking: input.bookingId,
+    amount,
+    phoneNumber,
+    status: 'pending',
+    checkoutRequestId,
+    merchantRequestId: `sim_merchant_${randomUUID()}`,
+  });
+
+  await recordAudit({
+    userId,
+    action: 'payment.initiated',
+    targetType: 'payment',
+    targetId: String(payment._id),
+    meta: { bookingId: input.bookingId, amount, phoneNumber, simulated: true },
+  });
+
+  const cancelled = phoneNumber.endsWith('0000');
+  const timer = setTimeout(() => {
+    handleStkCallback({
+      Body: {
+        stkCallback: {
+          CheckoutRequestID: checkoutRequestId,
+          ResultCode: cancelled ? 1032 : 0,
+          ResultDesc: cancelled
+            ? 'Request cancelled by user'
+            : 'The service request is processed successfully.',
+          CallbackMetadata: cancelled
+            ? undefined
+            : {
+                Item: [
+                  { Name: 'Amount', Value: amount },
+                  {
+                    Name: 'MpesaReceiptNumber',
+                    Value: `SIM${randomBytes(4).toString('hex').toUpperCase()}`,
+                  },
+                  { Name: 'PhoneNumber', Value: Number(phoneNumber) },
+                ],
+              },
+        },
+      },
+    }).catch((error: unknown) => {
+      logger.error({ err: error }, 'Simulated M-Pesa callback failed');
+    });
+  }, SIMULATED_PROMPT_DELAY_MS);
+  timer.unref();
+
+  return {
+    payment,
+    message:
+      'Simulated M-Pesa prompt sent. It completes in a few seconds. Use a phone number ending in 0000 to simulate a cancelled prompt.',
+  };
+}
+
 export async function initiateStkPush(userId: string, input: StkPushInput, amount: number) {
+  if (env.MPESA_SIMULATE) {
+    return simulateStkPush(userId, input, amount);
+  }
+
   assertMpesaConfigured();
 
   const phoneNumber = normalizePhoneNumber(input.phoneNumber);
@@ -222,8 +293,13 @@ export async function handleStkCallback(input: MpesaCallbackInput) {
     return { received: true, duplicate: true };
   }
 
-  const successful = callback.ResultCode === 0;
   const receipt = getCallbackValue(callback.CallbackMetadata, 'MpesaReceiptNumber');
+  const paidAmount = getCallbackValue(callback.CallbackMetadata, 'Amount');
+
+  // Never accept a success whose amount differs from the fee we asked for.
+  const amountMismatch =
+    callback.ResultCode === 0 && typeof paidAmount === 'number' && paidAmount !== payment.amount;
+  const successful = callback.ResultCode === 0 && !amountMismatch;
 
   const updatedPayment = await Payment.findOneAndUpdate(
     {
@@ -237,7 +313,7 @@ export async function handleStkCallback(input: MpesaCallbackInput) {
         ...(successful && typeof receipt === 'string' ? { mpesaReceiptNo: receipt } : {}),
       },
     },
-    { new: true },
+    { returnDocument: 'after' },
   );
 
   // Another callback may have processed this payment first.
@@ -245,21 +321,47 @@ export async function handleStkCallback(input: MpesaCallbackInput) {
     return { received: true, duplicate: true };
   }
 
-  const booking = await Booking.findById(payment.booking).select('user').lean();
+  const booking = await Booking.findById(payment.booking)
+    .select('user room')
+    .populate('user', 'fullName email')
+    .populate({
+      path: 'room',
+      select: 'roomNumber hostel',
+      populate: { path: 'hostel', select: 'name' },
+    })
+    .lean<{
+      user: { _id: unknown; fullName: string; email: string } | null;
+      room: { roomNumber: string; hostel: { name: string } | null } | null;
+    } | null>();
 
   await recordAudit({
-    userId: booking ? String(booking.user) : undefined,
+    userId: booking?.user ? String(booking.user._id) : undefined,
     action: successful ? 'payment.success' : 'payment.failure',
     targetType: 'payment',
     targetId: String(payment._id),
     meta: {
       checkoutRequestId: callback.CheckoutRequestID,
       resultCode: callback.ResultCode,
-      resultDescription: callback.ResultDesc,
+      resultDescription: amountMismatch
+        ? `Amount mismatch: expected ${payment.amount}, received ${String(paidAmount)}`
+        : callback.ResultDesc,
       receiptNumber: typeof receipt === 'string' ? receipt : undefined,
       amount: payment.amount,
     },
   });
+
+  if (successful && booking?.user) {
+    // The payment is already recorded, so a mail failure must not fail the callback.
+    sendPaymentConfirmationEmail(booking.user.email, {
+      fullName: booking.user.fullName,
+      amount: payment.amount,
+      receipt: typeof receipt === 'string' ? receipt : undefined,
+      hostelName: booking.room?.hostel?.name,
+      roomNumber: booking.room?.roomNumber,
+    }).catch((error: unknown) => {
+      logger.warn({ err: error }, 'Could not send the payment confirmation email');
+    });
+  }
 
   return { received: true, duplicate: false };
 }

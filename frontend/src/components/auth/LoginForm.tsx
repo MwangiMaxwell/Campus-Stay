@@ -52,7 +52,8 @@ export function LoginForm() {
         <p className="mt-2 text-sm text-muted">
           Use the email and password for your CampusStay account.
         </p>
-        <form className="mt-6 space-y-4" onSubmit={handleSubmit(onSubmit)} noValidate>
+        {/* method="post" keeps credentials out of the URL if the form submits before hydration. */}
+        <form method="post" className="mt-6 space-y-4" onSubmit={handleSubmit(onSubmit)} noValidate>
           {formError ? <Alert tone="danger">{formError}</Alert> : null}
           <Input
             label="Email"

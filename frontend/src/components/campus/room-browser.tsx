@@ -1,14 +1,20 @@
 'use client';
 
-import { useMemo, useState } from 'react';
+import { useCallback, useMemo, useState } from 'react';
 import Image from 'next/image';
+import Link from 'next/link';
 import { useSearchParams } from 'next/navigation';
 import { Search, ShieldCheck } from 'lucide-react';
+import { BookRoomModal } from '@/components/campus/booking-modal';
 import { CampusButton } from '@/components/campus/campus-button';
-import { labelRoomType } from '@/components/campus/format';
+import { Notice } from '@/components/campus/campus-ui';
+import { formatDate, labelRoomType } from '@/components/campus/format';
+import { PayModal } from '@/components/campus/pay-modal';
 import { RoomCard } from '@/components/campus/room-card';
+import { useApi } from '@/hooks/useApi';
+import { useAuth } from '@/hooks/useAuth';
 import { useRooms } from '@/hooks/useRooms';
-import type { RoomType } from '@/types';
+import type { Booking, RoomSummary, RoomType } from '@/types';
 
 const samples = [
   {
@@ -49,11 +55,29 @@ export function RoomBrowser() {
     isRoomType(initialType) ? initialType : '',
   );
   const [availableOnly, setAvailableOnly] = useState(false);
-  const { rooms, loading, error, total } = useRooms({
-    roomType: roomType || undefined,
-    available: availableOnly ? 'true' : undefined,
-    limit: 50,
-  });
+  const { user } = useAuth();
+  const isStudent = user?.role === 'student';
+  const [reloadToken, setReloadToken] = useState(0);
+  const [bookingRoom, setBookingRoom] = useState<RoomSummary | null>(null);
+  const [payBooking, setPayBooking] = useState<Booking | null>(null);
+  const myBookings = useApi<Booking[]>(isStudent ? '/api/v1/bookings' : null);
+  const reloadMyBookings = myBookings.reload;
+  const activeBooking = myBookings.data?.find(
+    (booking) => booking.status === 'pending' || booking.status === 'approved',
+  );
+  const { rooms, loading, error, total } = useRooms(
+    {
+      roomType: roomType || undefined,
+      available: availableOnly ? 'true' : undefined,
+      limit: 50,
+    },
+    reloadToken,
+  );
+
+  const afterBooked = useCallback(() => {
+    setReloadToken((value) => value + 1);
+    reloadMyBookings();
+  }, [reloadMyBookings]);
 
   const hostels = useMemo(() => {
     const seen = new Map<string, string>();
@@ -82,6 +106,26 @@ export function RoomBrowser() {
             ? 'Showing example residences while the room list is offline.'
             : `${visible.length} of ${total} rooms`}
       </p>
+      {activeBooking ? (
+        <div className="mt-6">
+          <Notice>
+            You already hold{' '}
+            <span className="font-semibold">
+              {activeBooking.room?.hostel?.name} {activeBooking.room?.roomNumber}
+            </span>{' '}
+            ({activeBooking.status}, {formatDate(activeBooking.checkInDate)} to{' '}
+            {formatDate(activeBooking.checkOutDate)}). Only one active booking is allowed.{' '}
+            <Link href="/bookings" className="font-semibold underline">
+              View booking
+            </Link>
+          </Notice>
+        </div>
+      ) : null}
+      {user && !isStudent ? (
+        <div className="mt-6">
+          <Notice>Staff accounts can browse rooms. Booking is for student accounts.</Notice>
+        </div>
+      ) : null}
       <div className="mt-8 grid rounded-2xl border border-[#dcdad4] bg-[#fbfaf7] p-2 md:grid-cols-[1.2fr_1fr_1fr_auto] md:items-center">
         <label className="flex items-center gap-3 border-b border-[#e6e2da] px-4 py-3 md:border-b-0 md:border-r">
           <Search className="size-4 text-[#8b9790]" />
@@ -136,9 +180,35 @@ export function RoomBrowser() {
       {!loading && visible.length > 0 ? (
         <div className="mt-8 grid gap-5 md:grid-cols-2 xl:grid-cols-3">
           {visible.map((room, index) => (
-            <RoomCard key={room.id} room={room} index={index} />
+            <RoomCard
+              key={room.id}
+              room={room}
+              index={index}
+              onBook={isStudent ? setBookingRoom : undefined}
+              bookingBlockedReason={
+                activeBooking ? 'You already have an active booking' : undefined
+              }
+            />
           ))}
         </div>
+      ) : null}
+      {bookingRoom ? (
+        <BookRoomModal
+          room={bookingRoom}
+          onClose={() => setBookingRoom(null)}
+          onBooked={afterBooked}
+          onPay={(booking) => {
+            setBookingRoom(null);
+            setPayBooking(booking);
+          }}
+        />
+      ) : null}
+      {payBooking ? (
+        <PayModal
+          booking={payBooking}
+          onClose={() => setPayBooking(null)}
+          onFinished={reloadMyBookings}
+        />
       ) : null}
       {!loading && visible.length === 0 && error ? (
         <div className="mt-8">

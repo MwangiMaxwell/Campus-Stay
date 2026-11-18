@@ -1,11 +1,21 @@
-import Image from 'next/image';
-import { ArrowRight } from 'lucide-react';
+﻿import Image from 'next/image';
 import { formatKes, labelRoomType } from '@/components/campus/format';
 import type { RoomSummary } from '@/types';
 
 const accents = ['bg-[#e9f1e6]', 'bg-[#ebe6df]', 'bg-[#e3ecee]'];
 
-export function RoomCard({ room, index = 0 }: { room: RoomSummary; index?: number }) {
+export function RoomCard({
+  room,
+  index = 0,
+  onBook,
+  bookingBlockedReason,
+}: {
+  room: RoomSummary;
+  index?: number;
+  // Present for students only. Staff and students who already hold a room see no button.
+  onBook?: (room: RoomSummary) => void;
+  bookingBlockedReason?: string;
+}) {
   const badge =
     room.availabilityStatus === 'available'
       ? 'Available now'
@@ -37,7 +47,6 @@ export function RoomCard({ room, index = 0 }: { room: RoomSummary; index?: numbe
               {room.hostel.location} · {labelRoomType(room.roomType)} · sleeps {room.capacity}
             </p>
           </div>
-          <ArrowRight className="size-4 shrink-0 text-[#84938b] transition-transform group-hover:translate-x-1" />
         </div>
         <div className="mt-5 flex items-center justify-between border-t border-[#ece9e2] pt-4">
           <p className="text-sm font-semibold text-[#40645d]">
@@ -48,6 +57,17 @@ export function RoomCard({ room, index = 0 }: { room: RoomSummary; index?: numbe
             {labelRoomType(room.roomType)}
           </span>
         </div>
+        {onBook && room.availabilityStatus === 'available' ? (
+          <button
+            type="button"
+            disabled={Boolean(bookingBlockedReason)}
+            title={bookingBlockedReason}
+            onClick={() => onBook(room)}
+            className="mt-4 w-full rounded-xl bg-[#173d39] px-4 py-2.5 text-sm font-medium text-[#f8f4eb] transition hover:bg-[#285b55] disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            Book this room
+          </button>
+        ) : null}
       </div>
     </article>
   );

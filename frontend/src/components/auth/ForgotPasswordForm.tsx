@@ -13,6 +13,7 @@ import Link from 'next/link';
 
 export function ForgotPasswordForm() {
   const [formError, setFormError] = useState<string | null>(null);
+  const [notice, setNotice] = useState<string | null>(null);
   const {
     register,
     handleSubmit,
@@ -24,11 +25,13 @@ export function ForgotPasswordForm() {
 
   async function onSubmit(values: ForgotPasswordValues) {
     setFormError(null);
+    setNotice(null);
     try {
-      await apiRequest('/api/v1/auth/forgot-password', {
+      const result = await apiRequest<{ message: string }>('/api/v1/auth/forgot-password', {
         method: 'POST',
         body: JSON.stringify(values),
       });
+      setNotice(result.message);
     } catch (error) {
       setFormError(formatApiError(error));
     }
@@ -38,10 +41,11 @@ export function ForgotPasswordForm() {
     <Card className="mx-auto max-w-lg">
       <h1 className="text-3xl font-semibold tracking-tight">Reset your password</h1>
       <p className="mt-2 text-sm text-muted">
-        Password reset is wired to the API and will send instructions once that service is finished.
+        Enter the email for your account. If it exists, we send a link that is valid for 30 minutes.
       </p>
-      <form className="mt-6 space-y-4" onSubmit={handleSubmit(onSubmit)} noValidate>
-        {formError ? <Alert tone="info">{formError}</Alert> : null}
+      <form method="post" className="mt-6 space-y-4" onSubmit={handleSubmit(onSubmit)} noValidate>
+        {formError ? <Alert tone="danger">{formError}</Alert> : null}
+        {notice ? <Alert tone="success">{notice}</Alert> : null}
         <Input
           label="Email"
           type="email"

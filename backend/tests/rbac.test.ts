@@ -1,6 +1,6 @@
-import { describe, expect, it } from 'vitest';
+﻿import { describe, expect, it } from 'vitest';
 import request from 'supertest';
-import { agent, app, createAccount, studentPayload } from './helpers';
+import { agent, app, createAccount, stayDates, studentPayload } from './helpers';
 
 const roomId = '507f1f77bcf86cd799439011';
 
@@ -27,7 +27,8 @@ describe('role protection', () => {
     expect(allowed.status).toBe(200);
     expect(allowed.body.success).toBe(true);
 
-    const deniedDelete = await adminSession.delete(`/api/v1/admin/users/${roomId}`);
+    const superAdmin = await createAccount('super_admin', 'owner@campusstay.test');
+    const deniedDelete = await adminSession.delete(`/api/v1/admin/users/${superAdmin._id}`);
     expect(deniedDelete.status).toBe(403);
   });
 
@@ -46,8 +47,7 @@ describe('role protection', () => {
 
     const valid = await session.post('/api/v1/bookings').send({
       roomId,
-      checkInDate: '2026-11-01',
-      checkOutDate: '2026-12-01',
+      ...stayDates(),
     });
     expect(valid.status).toBe(404);
     expect(valid.body.error.message).toBe('Room not found');

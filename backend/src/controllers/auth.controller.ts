@@ -1,8 +1,10 @@
-import {
+﻿import {
+  changePassword as changeOwnPassword,
   getCurrentUser,
   login,
   logout,
   registerStudent,
+  updateProfile as updateOwnProfile,
   forgotPassword as requestPasswordReset,
   resetPassword as completePasswordReset,
 } from '@/services/auth.service';
@@ -13,10 +15,12 @@ import { asyncHandler } from '@/utils/asyncHandler';
 import { clearAuthCookie, setAuthCookie } from '@/utils/cookies';
 import { signToken } from '@/utils/token';
 import type {
+  ChangePasswordInput,
   ForgotPasswordInput,
   LoginInput,
   RegisterInput,
   ResetPasswordInput,
+  UpdateProfileInput,
 } from '@/validators/auth.validator';
 
 function clientIp(req: { ip?: string }): string | undefined {
@@ -63,4 +67,22 @@ export const resetPassword = asyncHandler(async (req, res) => {
   const body = req.validated?.body as ResetPasswordInput;
   await completePasswordReset(body, clientIp(req));
   sendSuccess(res, { message: 'Password reset successfully' });
+});
+
+export const updateMe = asyncHandler(async (req, res) => {
+  if (!req.user) {
+    throw new AppError(401, 'Authentication required');
+  }
+  const body = req.validated?.body as UpdateProfileInput;
+  const user = await updateOwnProfile(req.user.id, body, clientIp(req));
+  sendSuccess(res, { user });
+});
+
+export const changeMyPassword = asyncHandler(async (req, res) => {
+  if (!req.user) {
+    throw new AppError(401, 'Authentication required');
+  }
+  const body = req.validated?.body as ChangePasswordInput;
+  await changeOwnPassword(req.user.id, body, clientIp(req));
+  sendSuccess(res, { message: 'Password changed successfully' });
 });

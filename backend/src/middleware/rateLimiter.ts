@@ -21,7 +21,8 @@ export const authRateLimiter = rateLimit({
 
 export const apiRateLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
-  limit: isTest ? 10000 : 300,
+  // Every browser reaches the API through the Next.js proxy, so allow for many users per IP.
+  limit: isTest ? 10000 : 1500,
   standardHeaders: true,
   legacyHeaders: false,
   handler: (_req, res) => {

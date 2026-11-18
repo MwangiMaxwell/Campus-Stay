@@ -1,8 +1,8 @@
-// TODO(member-2): extend this seed when new demo records are required.
+﻿// TODO(member-2): extend this seed when new demo records are required.
 import 'dotenv/config';
 import bcrypt from 'bcryptjs';
 import { connectDb, disconnectDb } from '@/config/db';
-import { Hostel, Room, User } from '@/models';
+import { Booking, Hostel, Payment, Room, User } from '@/models';
 import type { AvailabilityStatus, RoomType, UserRole, UserStatus } from '@/types';
 
 const BCRYPT_ROUNDS = 12;
@@ -220,6 +220,79 @@ async function seed(): Promise<void> {
     );
   }
 
+  // Demo bookings: one live stay in a booked room and one finished stay, both paid.
+  const day = 24 * 60 * 60 * 1000;
+  const today = new Date();
+  today.setUTCHours(0, 0, 0, 0);
+  const demoBookings: Array<{
+    studentEmail: string;
+    roomNumber: string;
+    hostel: string;
+    status: 'approved' | 'completed';
+    checkIn: Date;
+    checkOut: Date;
+    receipt: string;
+  }> = [
+    {
+      studentEmail: 'brian.otieno@campusstay.test',
+      roomNumber: 'B-203',
+      hostel: 'Lakeside Hall',
+      status: 'approved',
+      checkIn: new Date(today.getTime() - 20 * day),
+      checkOut: new Date(today.getTime() + 100 * day),
+      receipt: 'SEED000001',
+    },
+    {
+      studentEmail: 'amina.wanjiku@campusstay.test',
+      roomNumber: 'A-105',
+      hostel: 'Kilimo Hostels',
+      status: 'completed',
+      checkIn: new Date(today.getTime() - 200 * day),
+      checkOut: new Date(today.getTime() - 100 * day),
+      receipt: 'SEED000002',
+    },
+  ];
+
+  for (const demo of demoBookings) {
+    const userId = savedUsers.get(demo.studentEmail);
+    const room = await Room.findOne({
+      hostel: hostelIds.get(demo.hostel),
+      roomNumber: demo.roomNumber,
+    });
+    if (!userId || !room) {
+      throw new Error(`Cannot seed booking for ${demo.roomNumber}`);
+    }
+
+    const booking = await Booking.findOneAndUpdate(
+      { user: userId, room: room._id, status: demo.status },
+      {
+        $set: {
+          bookingDate: new Date(demo.checkIn.getTime() - 5 * day),
+          checkInDate: demo.checkIn,
+          checkOutDate: demo.checkOut,
+        },
+      },
+      { upsert: true, returnDocument: 'after', setDefaultsOnInsert: true },
+    );
+    if (!booking) {
+      throw new Error(`Could not seed booking for ${demo.roomNumber}`);
+    }
+
+    await Payment.findOneAndUpdate(
+      { mpesaReceiptNo: demo.receipt },
+      {
+        $set: {
+          booking: booking._id,
+          amount: room.price,
+          phoneNumber: '254711000001',
+          status: 'success',
+          paymentDate: new Date(demo.checkIn.getTime() - 4 * day),
+        },
+      },
+      { upsert: true, returnDocument: 'after', setDefaultsOnInsert: true },
+    );
+  }
+
   console.log('Seeded CampusStay demo data');
   console.log('super_admin  peter.kamau@campusstay.test  SuperAdmin#2026');
   console.log('admin        grace.mwangi@campusstay.test  Admin#2026');
@@ -227,6 +300,7 @@ async function seed(): Promise<void> {
   console.log('student      brian.otieno@campusstay.test  Student#2026');
   console.log(`Hostels: ${hostels.length}`);
   console.log(`Rooms: ${rooms.length}`);
+  console.log(`Bookings: ${demoBookings.length}`);
 }
 
 seed()

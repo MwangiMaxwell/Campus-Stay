@@ -1,4 +1,4 @@
-'use client';
+﻿'use client';
 
 import { useEffect, useState } from 'react';
 import { apiRequest, formatApiError } from '@/lib/api';
@@ -11,7 +11,8 @@ interface RoomsState {
   total: number;
 }
 
-export function useRooms(filters: RoomFilters): RoomsState {
+// Bump reloadToken to refetch after a booking changes room availability.
+export function useRooms(filters: RoomFilters, reloadToken = 0): RoomsState {
   const [state, setState] = useState<RoomsState>({
     rooms: [],
     loading: true,
@@ -57,7 +58,7 @@ export function useRooms(filters: RoomFilters): RoomsState {
     return () => {
       cancelled = true;
     };
-  }, [hostel, roomType, minPrice, maxPrice, available, page, limit]);
+  }, [hostel, roomType, minPrice, maxPrice, available, page, limit, reloadToken]);
 
   return state;
 }

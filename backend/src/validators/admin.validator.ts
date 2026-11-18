@@ -22,6 +22,7 @@ const paymentStatusSchema = z.enum(['pending', 'success', 'failed']);
 export const adminListQuerySchema = z.object({
   role: roleSchema.optional(),
   status: statusSchema.optional(),
+  q: z.string().trim().min(1).max(80).optional(),
   ...paginationQuerySchema,
 });
 
@@ -45,6 +46,9 @@ export const adminUpdateUserSchema = adminCreateUserSchema
 
 export const adminRoomListQuerySchema = z.object({
   ...paginationQuerySchema,
+  hostelId: objectIdSchema.optional(),
+  roomType: roomTypeSchema.optional(),
+  availabilityStatus: availabilitySchema.optional(),
 });
 
 export const adminRoomSchema = z.object({
@@ -74,6 +78,27 @@ export const adminBookingListQuerySchema = z.object({
 export const adminPaymentListQuerySchema = z.object({
   ...paginationQuerySchema,
   status: paymentStatusSchema.optional(),
+});
+
+// HOSTELS
+
+export const adminHostelSchema = z.object({
+  name: z.string().trim().min(2).max(80),
+  location: z.string().trim().min(2).max(120),
+  contactPhone: phoneSchema,
+});
+
+export const adminUpdateHostelSchema = adminHostelSchema
+  .partial()
+  .refine((value) => Object.keys(value).length > 0, {
+    message: 'Provide at least one field to update',
+  });
+
+// AUDIT LOG
+
+export const auditLogListQuerySchema = z.object({
+  ...paginationQuerySchema,
+  action: z.string().trim().min(1).max(60).optional(),
 });
 
 // REPORTS
@@ -109,5 +134,12 @@ export type AdminRoomListQuery = z.infer<typeof adminRoomListQuerySchema>;
 export type AdminBookingListQuery = z.infer<typeof adminBookingListQuerySchema>;
 
 export type AdminPaymentListQuery = z.infer<typeof adminPaymentListQuerySchema>;
+
+export type AdminHostelInput = z.infer<typeof adminHostelSchema>;
+export type AdminUpdateHostelInput = z.infer<typeof adminUpdateHostelSchema>;
+export type AuditLogListQuery = z.infer<typeof auditLogListQuerySchema>;
+export type BookingsReportQuery = z.infer<typeof bookingsReportQuerySchema>;
+export type PaymentsReportQuery = z.infer<typeof paymentsReportQuerySchema>;
+export type OccupancyReportQuery = z.infer<typeof occupancyReportQuerySchema>;
 
 export type AdminListQuery = z.infer<typeof adminListQuerySchema>;
